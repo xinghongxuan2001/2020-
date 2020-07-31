@@ -1,0 +1,1350 @@
+#include<stdio.h>
+#include<stdlib.h>
+#include<graphics.h>
+#include<string.h>
+#include<conio.h>
+#include<dos.h>
+#define S 16/*16点阵*/
+#define HZK "C:\\tc\\hzk16"/*文件路径*/
+#define PIC "picture.dat"/*存图路径*/
+typedef union {/*全局定义共用体*/
+	int n;/*键值*/
+	char u[2];/*便于取高位(扫描码)低位(字符)*/
+}KEY;
+typedef struct{/*在主函数内部定义STU，方便柱状图操作的时候读取文件将数据存入STU*/
+    char name[100];/*存储姓名*/
+    char score_math[16];
+    char score_english[16];
+    char score_computer[16];
+    float math;/*数学分数*/
+    float english;/*英语分数*/
+    float computer;/*计算机分数*/
+    float sum;
+
+}STU;
+typedef struct {
+		int x;
+		int y;
+}POINT;/*点定义一个结构体*/
+int x_mouse0,y_mouse0;/*将鼠标的位置设置成全局变量，这样可以在换图(鼠标按c)的时候不改变鼠标位置*/
+void disphz(int x, int y, char *p, int color,int m,int distance);/*x,y是坐标(文字左上角)，*p是字符串，color是字体颜色,m是放大倍数，distance是字间距*/
+void flash_(int);/*光标闪烁*/
+int is_illegal_char(int);/*非法字符判定*/
+int un_read_file(FILE** fp,char *filename);/*判断文件是否不存在,不存在返回1，存在返回0*/
+void flash_successness();/*读取文件成功时闪烁一下提示*/
+void program_start();/*程序开始的第1页，按任意键进入程序*/
+void check_filename(char *filename);/*检查该文件是否有后缀*/
+char choose();/*只操作图象画图，不要改变主函数内的值，否则不易操作变量*/
+int read_from_file(STU *stu,FILE *fp);/*返回学生数量，柱状图用得到*/
+void subject_and_color(POINT block,int *color,char(* subject)[20],int num_subject);/*忘了加导致连接错误*/
+int turing_bar(STU *stu,int cnt);/*0代表退出整个程序(按x) ；2代表看圆饼图(按) 3代表返回主菜单 */
+int stu_circle(STU *stu,int cnt);
+int picture(int kind_pic,STU *stu,int num_stu);/*显示图片的种类，做成函数为了goto起来方便*/
+int main_menu();/*显示主菜单，按3退出程序，不显示动画*/
+void end_zimu();/*结束字幕*/
+/*void save_pic();end_zimu的子函数读图，保存图片*/
+/*void read_pic();end_zimu的子函数读图，不断向上翻滚*/
+void my_sound(int fred);/*发声*/
+int mouse_check();/*initmouse子函数检查鼠标装载是否成功，失败返回0，成功返回-1*/
+int init_mouse(int xmin , int ymin , int xmax , int ymax);/*初始化鼠标并且规定鼠标边界*/
+void set_mouse_sit(int x,int y);/*设置鼠标位置*/
+int read_mouse(int *mx,int *my,int *mbutton);/*检测鼠标状态，返回鼠标按键状态*/
+void cursor(int x,int y);/*异或操作一下*/
+int main() {
+
+    STU stu[100]={0};/*学生容量最大扩充到100*/
+	FILE* fp = NULL;
+	int temp;
+	int i;
+	int j;
+	int num_stu;/*统计到的学生数量*/
+	int jud;
+    char t;
+	int vga = VGA;
+	int vgahi = VGAHI;
+	int count = 0;/*始终表示等待输入的是第count号(数组计数从0开始)*/
+	int picture_sort;/*1代表柱状图，2代表圆饼图*/
+    int count_flash;/*光标的位置*/
+	KEY u = { 0 };
+	char filename[100] = { 0 };/*文件名*/
+	int paint_kind = 0;/*1代表*/
+
+	initgraph(&vga, &vgahi, "");
+	/***************************进入程序的按任意键继续********************/
+    program_start();
+	/***************************主菜单选择阅读圆饼图还是柱状翻页图***************************/
+MAIN_MEUN:/*主菜单*/
+    picture_sort=main_menu();
+    if(picture_sort==3){/*退出*/
+        closegraph();
+        return 0;
+    }
+    (picture_sort == 1)?(x_mouse0=262,y_mouse0=435):(x_mouse0=319,y_mouse0=239);/*判断最开始选的图片种类对应的鼠标位置*/
+    set_mouse_sit(x_mouse0,y_mouse0);/*将鼠标设置好*/
+    init_mouse(0,0,639,479);/*初始化鼠标在全屏幕上*/
+	/**************************************文件名输入界面部分代码*************************************/
+INPUT_FILE_NAME:/*输入文件名*/
+    setbkcolor(BLACK);
+    setfillstyle(1, WHITE);/*填充色*/
+    disphz(40,85,"请输入数据库文件名，按回车键结束，",WHITE,1,1);
+	bar(40, 105, 440, 120);/*画出操作框*/
+    disphz(40,125,"说明：",WHITE,1,1);
+    disphz(60,145,"一、不带盘符和路径视为当前目录",WHITE,1,1);
+    disphz(60,165,"二、文件后缀可以省略",WHITE,1,1);
+    disphz(60,185,"三、支持光标移动以及从光标处插入字符",WHITE,1,1);
+    disphz(60,205,"四、支持",WHITE,1,1);
+    setcolor(WHITE);
+    settextjustify(0, 2);/*点位于字的左上*/
+    settextstyle(0,0,2);/*书写风格*/
+    outtextxy(130, 205,"DELETE");
+    settextstyle(0,0,1);/*书写风格*/
+    count = 0;/*初始化*/
+    count_flash=0;/*光标位置初始化*/
+    memset(filename,0,sizeof(filename));/*初始化*/
+    memset(stu,0,sizeof(stu));
+    u.n = 0;/*初始化*/
+	while (1) {
+	if (u.u[1] == 0x1c) {/*不能写成换行,这是bios的缓冲区*/
+		check_filename(&filename);/*检查该文件是否有后缀,没有的话给加上*/
+		temp = un_read_file(&fp,filename);/*在函数中读文件并检查是否能打开*/
+		if(!temp){/*文件存在*/
+			flash_successness();/*闪烁红字表示有这个bdf文件，调试用*/
+            cleardevice();
+			break;
+		}
+		else{/*文件不存在*/
+			t = choose();
+			if(t=='1'){/*重新输入*/
+				goto INPUT_FILE_NAME;/*选了1那就回去重新输入文件名*/
+			}
+			else
+            if(t=='2'){/*退出程序*/
+                    cleardevice();
+                    return 0;
+            }
+
+		}
+	}
+	if(count_flash!=50)/*顶到最前面了就不再闪烁了*/
+        flash_(count_flash);/*把闪烁的光标打包成一个函数*/
+	while (u.n = bioskey(1)) {/*时刻监测输入状态,没有输入的时候自动继续大循环*/
+		bioskey(0);/*把缓冲区读到的消掉,不然整个filename都是你写进去的第一个字母*/
+		if (u.n){/*真的有输入的时候*/
+            switch(u.u[1]){/*看看是不是左右键和delete*/
+                /*左键*/
+             case 0x4b: {if(count_flash) count_flash--; continue;/*光标不在最前端*/}
+                /*右键*/
+             case 0x4d: {if(count_flash < strlen(filename)) count_flash++; continue;}
+                /*delete*/
+             case 0x53: {
+                        for(i=count_flash;i<=strlen(filename);i++)
+                            filename[i]=filename[i+1];
+                        count--;
+                        /*filename[--count_flash] = 0;*/
+                        bar(40, 105, 440, 120);
+                        setcolor(RED);
+                        outtextxy(42, 120, filename);
+                        continue;
+                    }
+            }
+			if (is_illegal_char(u.u[0]))/*判断非法字符*/
+				break;
+		}
+		settextstyle(0,0,1);/*书写风格*/
+		if (u.u[1] == 0xe) {/*backspace的扫描码，准备删除*/
+			if (count_flash) {
+				/*count_flash不为0,也就是说光标不在最前面*/
+				/*图像显示消掉光标前面的字符，然后光标自动前移，字符改一下*/
+				settextjustify(0, 0);/*点位于字的左下*/
+				setcolor(WHITE);
+				outtextxy(42, 120, filename);
+				for(i=count_flash-1;i<strlen(filename);i++)
+                    filename[i]=filename[i+1];
+                    count_flash--;
+				/*filename[--count_flash] = 0;*/
+				
+				setcolor(RED);
+				outtextxy(42, 120, filename);
+			}
+		}
+		else {/*不是backspace准备插入字符*/
+			
+			/*不要超过框的长度*/
+                if(strlen(filename)==50)
+                    continue;
+            /*设置文本版面*/
+                settextjustify(0, 0);
+                for(i=strlen(filename);i>count_flash;i--)
+                    filename[i]=filename[i-1];
+			
+			/*将字符放入数组*/
+                filename[count_flash++] = u.u[0];
+                bar(40, 105, 440, 120);
+                setcolor(RED);
+			/*光标会自己向后移动*/
+			outtextxy(42, 120, filename);
+            }
+        }
+    }
+	/***文件已经成功打开***/
+	num_stu=read_from_file(stu,fp);/**先将数据从文件中读出排序之后存入stu数组，同时记录下有效人数**/
+	/********************************输入界面完毕，下面是显示图模式**************************************/
+	jud = picture(picture_sort,stu,num_stu);/*显示柱状图或者圆饼图*/
+	if(jud==3){/*返回主菜单*/
+        /*初始化主菜单里自带了*/
+        goto MAIN_MEUN;
+	}
+	/****************************************************动画部分*************************************************************/
+	end_zimu();
+	closegraph();
+
+	return 0;
+
+}
+/*函数并没有，上课的时候是放在main里的*/
+
+void program_start(){
+
+    char *p = "大程序设计";
+    char *p1 = "请按任意键进入程序主菜单";
+    int i,j;
+    setbkcolor(GREEN);
+	setcolor(YELLOW);
+	setfillstyle(1,YELLOW);
+	for(i=0;i<5;i++){
+		circle(70+i*120,150,55);
+		floodfill(70+i*120,150,YELLOW);
+	}
+	disphz(42,125,p,RED,3,73);
+	while(1){
+        if(bioskey(1))
+            break;
+		disphz(200,350,p1,RED,1,3);/*直接写黑色不显示。。。*/
+		for(i=1;i<=10;i++)
+			delay(30000);
+		disphz(200,350,p1,GREEN,1,3);
+		for(i=1;i<=10;i++)
+			delay(30000);
+	}
+	bioskey(0);/*取走缓冲区内字符*/
+	setbkcolor(BLACK);
+	cleardevice();
+    /**
+     * 函数功能：
+     * 显示程序运行刚开始的
+     * "请按任意键进入程序主菜单"
+     *  的动画
+     */
+}
+int main_menu(){
+    KEY key;
+    setcolor(RED);
+    setbkcolor(BLACK);
+    setfillstyle(1,DARKGRAY);
+    disphz(150,100,"主菜单",RED,3,50);
+    rectangle(150,200,400,400);
+    floodfill(151,230,RED);
+    disphz(150,200,"请选择你希望的数据体现模示：",YELLOW,1,1);
+    disphz(150,230,"键盘操作按下对应数字即可",YELLOW,1,1);
+
+    setfillstyle(1,BLUE);
+    rectangle(300,270,390,290);
+    floodfill(301,271,RED);
+    disphz(300,270,"一、条形图",YELLOW,1,1);
+
+
+    rectangle(300,300,390,320);
+    floodfill(301,301,RED);
+    disphz(300,300,"二、圆饼图",YELLOW,1,1);
+
+
+    rectangle(300,330,390,350);
+    floodfill(301,331,RED);
+    disphz(300,330,"三、退出",YELLOW,1,1);
+
+
+
+    while(key.n=bioskey(0)){
+        if(key.u[1]==0x2){/*1的扫描码*/
+            cleardevice();
+            return 1;
+        }
+        if(key.u[1]==0x3){/*2的扫描码*/
+            cleardevice();
+            return 2;
+        }
+        if(key.u[1]==0x4){/*3的扫描码*/
+            cleardevice();
+            return 3;
+        }
+    }
+
+}
+void flash_(int num) {
+
+	int i;
+	setcolor(BLACK);
+	line(42 + num * 8, 119, 50 + num * 8, 119);
+	for (i = 1; i <= 3; i++)
+		delay(30000);
+	setcolor(WHITE);
+	line(42 + num * 8, 119, 50 + num * 8, 119);
+	for (i = 1; i <= 3; i++)
+		delay(30000);
+    /**
+         *
+         * flash_功能，通过count的变化改变闪烁的位置
+         * 该光标闪烁原理就是不断跑while(1)循环
+         * 用背景色和指定颜色交替画直线
+         *
+         *
+         */
+}
+int is_illegal_char(int jud) {/*其实还有：和点需要加*/
+	if (!(jud >= 'a' && jud <= 'z'))/*既不是小写字母*/
+		if (!(jud >= 'A' && jud <= 'Z'))/*也不是大写字母*/
+			if (jud != '\\')/*还不是下划线*/
+				if (jud!='.')/*不是.*/
+					if(jud!=':')/*不是:*/
+						if(!(jud>='0' && jud<='9'))
+							if(jud!='\b')
+								if(jud!='_')
+					return 1;/*是非法字符*/
+	return 0;/*不是非法字符*/
+	{/**
+     * 函数功能：
+     * 检测按下的是不是文件名的
+     * 的非法字符
+     *
+     *  返回值：
+     *  是非法字符返回1
+     *  合法字符返回0;
+     */};
+}
+void check_filename(char *filename){
+        /**
+         *   函数功能：
+         *   检查文件名后缀有无.dbf
+         *   没有则添加.dbf后缀
+         */
+        if(strlen(filename)<=4 || filename[strlen(filename)-1] !='f'|| filename[strlen(filename)-2]!='b' || filename[strlen(filename)-3]!='d' || filename[strlen(filename)-4]!='.')
+			strcat(filename,".dbf");
+}
+int un_read_file(FILE **fp,char *filename){
+    /**
+      *  函数功能:
+      *  判断文件是否不存在,
+      *  不存在返回1，存在返回0
+      */
+
+	*fp = fopen(filename,"rb");
+	if(!*fp){/*没打开*/
+		return 1;
+	}
+	return 0;
+}
+void flash_successness(){
+    /**
+     * 函数功能:
+     * 提示用户文件读取成功；
+     *
+     *
+     *
+     */
+
+    int j;
+    setcolor(RED);
+    disphz(200,300,"存在该文件！",WHITE,1,5);
+    for(j=1;j<=20;j++)
+        delay(30000);
+}
+char choose(){
+    /**
+     * 函数功能：
+     * 在无法打开文件的情况下
+     * 显示提示动画
+     * 发出错误声音
+     * 然后让用户选择退出程序还是重新输入
+     *
+     *  返回值:字符'1''2'各自代表重新输入还是退出程序
+     */
+
+    int i,j;
+    KEY TEMP={0};/*用来接收按键1或2*/
+    settextjustify(0,2);/*让点在字的左上方,和disphz保持一致*/
+    settextstyle(0,0,2);/*字体大一点*/
+			for(i=1;i<=2;i++){/*闪烁两次的红字*/
+				setcolor(RED);
+				disphz(200,300,"无法打开该文件，请检查您的输入是否正确。",RED,1,5);
+                my_sound(800);
+                my_sound(500);
+				for(j=1;j<=7;j++)
+					delay(30000);
+				setcolor(BLACK);
+				disphz(200,300,"无法打开该文件，请检查您的输入是否正确。",BLACK,1,5);
+				for(j=1;j<=7;j++)
+					delay(30000);
+			}
+            setcolor(WHITE);
+			outtextxy(320,240,"1: ");
+            disphz(345,240,"重新输入文件名",WHITE,1,5);/*坐标要调整好，字应该在数字后面一点*/
+			outtextxy(320,280,"2: ");
+            disphz(345,280,"退出程序",WHITE,1,5);
+            while(TEMP.n = bioskey(0)){/*按1或2才能退出，乱按没有用，避免程序崩溃*/
+                if(TEMP.u[1]==0x2 || TEMP.u[1]==0x3){/*1和2的扫描码*/
+                    if(TEMP.u[1]==0x2){/*1的扫描码*/
+                        cleardevice();/*直接清屏，简单粗暴*/
+                    }
+                    return TEMP.u[0];/*返回字符*/
+                }
+            }
+}
+void disphz(int x, int y, char *p, int color, int m,int distance){/*m是放大倍数*/
+    /**
+     * 函数功能:
+     * 以x，y为左上角用color色显示p所指的字符串，字间距和distance正比
+     */
+
+
+    int  i, j, n, k;
+    FILE *fp;
+    char qh,wh;
+    long offset;
+    char buffer[S*S/8];
+    char mask[] = {0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01};
+    if((fp = fopen(HZK,"rb")) == NULL)
+        exit(0);
+    while(*p != '\0'){
+        qh = *p - 0xa0;          /*计算区号*/
+        p++;
+        wh = *p - 0xa0;          /*计算位号*/
+        p++;
+        offset = (94L*(qh-1) + wh-1)*S*S/8; /*计算地址码*/
+        fseek(fp, offset, 0);
+        fread(buffer, S*S/8, 1, fp);
+        for(i = 0 ;i < S; i++){
+            for(j = 0; j < S; j++){
+	                if((buffer[S/8*i+j/8] & mask[j%8]) != 0)
+	                    for(n = 0; n < m; n++)
+		                        for(k = 0; k < m; k++)
+		                            putpixel(x+j*m+n, y+i*m+k, color);
+	           }
+       }
+       x += S*m + distance;
+   }
+   fclose(fp);
+}
+int read_from_file(STU *stu,FILE *fp){
+    /** 函数功能介绍
+     {*
+     * 函数功能：从文件读出数据并排序
+     * stu按照总分/3降序排序存入主函数
+     *
+     */
+
+typedef struct {
+    char FILE_sign;/*文件特征标志*/
+    char create_time[3];/*建表时间*/
+    long record_num;/*学生人数*/
+    short FILE_HEAD_len;/*文件头的总长度*/
+    short per_record_len;/*每条记录的长度*/
+    char empty[20];/*20个空白*/
+}HEAD;
+typedef struct{
+    char name[10];/*字段名*/
+    char type;/*字段类型*/
+    char emp;/*第十字节的空白*/
+    long start_sit;/*该字段在记录中的起始位置*/
+    char len;/*字段长度*/
+    char point_sit;/*小数位数*/
+    char empty[14];/*14个空白*/
+}FILED;/*文件字段*/
+void name(STU *temp,long len);/*把名字后面的空格去掉*/
+void stu_sort(STU *stu,long cnt);/*按照总分排序*/
+    HEAD head;
+    FILED filed[5];
+    long cnt=0;/*代表有效的未被逻辑删除的人数*/
+    long num_filed;
+    long i,j;
+    fread(&head,sizeof(head),1,fp);/*32字节*/
+    num_filed = (head.FILE_HEAD_len-33)/32;/*字段数*/
+    for(i=0;i<num_filed;i++){/*把四个字段信息存入filed里*/
+        fread(&filed[0],sizeof(filed[0]),1,fp);
+        if(strcmp(filed[0].name,"姓名")==0){
+            filed[1]=filed[0];
+        }
+        if(strcmp(filed[0].name,"数学")==0){
+            filed[2]=filed[0];
+        }
+        if(strcmp(filed[0].name,"英语")==0){
+            filed[3]=filed[0];
+        }
+        if(strcmp(filed[0].name,"计算机")==0){
+            filed[4]=filed[0];
+        }
+    }
+     for(i=0;i<head.record_num;i++){
+        fseek(fp,head.FILE_HEAD_len+i*head.per_record_len,SEEK_SET);
+        if(fgetc(fp)=='*')/*遇到逻辑删除就不统计*/
+            continue;
+        fseek(fp,head.FILE_HEAD_len+i*head.per_record_len+filed[1].start_sit,SEEK_SET);
+        fread(&stu[cnt].name,filed[1].len,1,fp);
+        name(&stu[cnt],filed[1].len);/*把名字后面的空格去掉*/
+
+        fseek(fp,head.FILE_HEAD_len+i*head.per_record_len+filed[2].start_sit,SEEK_SET);
+        fread(&stu[cnt].score_math,filed[2].len,1,fp);
+        stu[cnt].math = atof(stu[cnt].score_math);
+
+        fseek(fp,head.FILE_HEAD_len+i*head.per_record_len+filed[3].start_sit,SEEK_SET);
+        fread(&stu[cnt].score_english,filed[3].len,1,fp);
+        stu[cnt].english = atof(stu[cnt].score_english);
+
+        fseek(fp,head.FILE_HEAD_len+i*head.per_record_len+filed[4].start_sit,SEEK_SET);
+        fread(&stu[cnt].score_computer,filed[4].len,1,fp);
+        stu[cnt].computer = atof(stu[cnt].score_computer);
+        /*三科成绩相加*/
+        stu[cnt].sum = stu[cnt].computer+stu[cnt].english+stu[cnt].math;
+        stu[cnt].sum/=3;/*按照平均分排的序*/
+        cnt++;
+    }
+    stu_sort(stu,cnt);
+    return cnt;
+
+
+}
+void stu_sort(STU *stu,long cnt){
+        int i,j,k;
+        float sum1,sum2;
+        STU temp;
+        for(i=0;i<cnt-1;i++){
+            k=i;
+            sum1 = stu[i].sum;
+            for(j=i+1;j<cnt;j++){
+                sum2=stu[j].sum;
+                if(sum1<sum2){
+                    k=j;
+                    sum1 = sum2;
+                }
+            }
+            temp = stu[i];
+            stu[i]=stu[k];
+            stu[k]=temp;
+        }
+    }
+void name(STU *temp,long len){
+    int i;
+    for(i=len-1;i>=0;i--){
+        if(temp->name[i]==' ')
+            temp->name[i]=0;
+        else
+            break;
+    }
+}
+int turing_bar(STU *stu,int cnt){
+    /** 函数功能：制作翻页条形图
+     *
+     *
+     * cnt 人数
+     *
+     * 返回值:0代表退出整个程序(按x)
+     *        2代表看圆饼图(按c)
+     *        3代表返回主菜单(按m)
+     */
+
+/*分数已经在stu内部了，不需要atoi了*/
+	KEY num_key={0};/*键值*/
+	void bar9(STU *stu,int num_page,POINT temp1,POINT temp2,POINT zero,int cnt,int* color);
+	char subject[3][20]={"数学","英语","计算机"};/*学科的名字*/
+	char kedu[11][5]={"100-","90-","80-","70-","60-","50-","40-","30-","20-","10-","0-"};
+	/*刻度*/
+	int fillcolor[3]={2 , 3 , 4};
+	/*填充色*/
+	POINT block={530,20};
+	/*方便做右上角的颜色对应学科的*/
+	POINT y_100={80,150},y_point={80,120},x_point={600,380},zero={80,380};
+	/*规定好分数为100的点、y轴端点、x轴端点、零点,方便作图*/
+	POINT temp1;
+	/*temp1={zero.x,zero,y}???????????*/
+	POINT temp2;/*以zero为标准方便后续做柱状图*/
+	int num_page=0;/*翻到的页数*/
+	int i,j,k;
+	int key_color = WHITE;
+	int x_mouse,y_mouse,cmd;
+    int x1=150,x2=215,y1=420,y2=450;
+    int cmd_0 = 1;
+    int jud = 0;/*判断在不在按键上*/
+    int anti_jud=1;/*防止一直按着一个按键(鼠标或键盘)连续翻页，0说明抬起来过，1说明一直再按，不进行操作*/
+
+	cursor(x_mouse0,y_mouse0);/*按照当前位置放置鼠标*/
+	set_mouse_sit(x_mouse0,y_mouse0);/*刚开始忘了写。。。结果第一次直接从中键开始*/
+    subject_and_color(block,fillcolor,subject,3);/*右上角的颜色对应学科*/
+    line(x_point.x,x_point.y,zero.x,zero.y);/*x轴*/
+	line(y_point.x,y_point.y,zero.x,zero.y);/*y轴*/
+	settextjustify(2,1);
+	for(i=0;i<=10;i++)
+		outtextxy(y_100.x,y_100.y+(zero.y-y_100.y)*i/10,kedu[i]);
+	/*for循环一波标记刻度*/
+	settextjustify(1,0);
+	disphz(y_point.x,y_point.y-10,"分数",WHITE,1,1);/*y轴代表的意义,字要显示在y_point.y上面，所以纵坐标要向上一点(-10)*/
+	settextjustify(0,1);
+	disphz(x_point.x,x_point.y-10,"姓名",WHITE,1,1);/*x轴代表的意义*/
+	temp1 = zero;/**/
+	temp2 = zero;
+
+	/*************************画学生条形图***********************************/
+	bar9(stu,num_page,temp1,temp2,zero,cnt,fillcolor);/*看看后续能不能把这个注释掉*/
+	while(1){/*需要找个变量把返回值存起来*/
+
+                    jud=0;
+                    x1=150,x2=215,y1=420,y2=450;/*初始化按钮参数*/
+                    num_key.n=bioskey(1);
+                    read_mouse(&x_mouse,&y_mouse,&cmd);/*同时检测*/
+                    cursor(x_mouse0,y_mouse0);
+                    cursor(x_mouse,y_mouse);/*两步把鼠标清除*/
+                    x_mouse0 = x_mouse;
+                    y_mouse0 = y_mouse;
+                    if(num_key.n){/*键值不为0,这个时候只能是按下按键了，不可能鼠标按下*/
+                        bioskey(0);
+                    }
+                    /*****看看是否按下某个键*****/
+                    if(cmd!=1)/*cmd这里只用两个取值，1代表按了左键，其他都是0*/
+                        cmd = 0;
+                    /**********************************键之间间隔80，每个键宽度65，高30***************************************************/
+                    if(num_page==0){
+
+                        disphz(x1+5,y1+10,"上页",DARKGRAY,1,1);
+                        key_color = DARKGRAY;
+                        setcolor(key_color);
+                        settextjustify(0,2);
+                        outtextxy(x1+40,y1+15,"(P)");/*p键*/
+
+                    }
+                    else
+                    if(x_mouse >=150 && x_mouse<=215 && y_mouse>=420 && y_mouse<=450){/*鼠标在上页p键*/
+                        jud =1;
+                        disphz(x1+5,y1+10,"上页",RED,1,1);
+                        key_color = RED;
+                        setcolor(key_color);
+                        settextjustify(0,2);
+                        outtextxy(x1+40,y1+15,"(P)");/*p键*/
+                        /*红色覆盖*/
+                        if(cmd)
+                        num_key.u[1]=0x19;/*p扫描码*/
+                    }
+                    else{
+                        disphz(x1+5,y1+10,"上页",WHITE,1,1);
+                        key_color = WHITE;
+                        setcolor(key_color);
+                        settextjustify(0,2);
+                        outtextxy(x1+40,y1+15,"(P)");/*p键*/
+                    }
+                    rectangle(x1,y1,x2,y2);/*绘制矩形放在写完字之后，不然会用上个颜色去画*/
+                    settextjustify(0,2);
+
+                    x1+=80;
+                    x2+=80;
+                    if((num_page+1)*3>=cnt){
+                        settextjustify(0,2);
+                        key_color = DARKGRAY;
+                        setcolor(key_color);
+
+                        disphz(x1+5,y1+10,"下页",key_color,1,1);
+                        outtextxy(x1+40,y1+15,"(N)");/*N键*/
+                    }
+                    else
+                    if(x_mouse >=230 && x_mouse<=295 && y_mouse>=420 && y_mouse<=450){/*鼠标在下页n键*/
+                        jud=1;
+                        settextjustify(0,2);
+                        key_color = RED;
+                        setcolor(key_color);
+
+                        disphz(x1+5,y1+10,"下页",RED,1,1);
+                        outtextxy(x1+40,y1+15,"(N)");/*N键*/
+                        if(cmd)
+                        num_key.u[1]=0x31; /*n扫描码*/
+                    }
+                    else{
+                        settextjustify(0,2);
+                        key_color = WHITE;
+                        setcolor(key_color);
+                        disphz(x1+5,y1+10,"下页",WHITE,1,1);
+                        outtextxy(x1+40,y1+15,"(N)");/*N键*/
+                    }
+                    rectangle(x1,y1,x2,y2);/*绘制矩形放在写完字之后，不然会用上个颜色去画*/
+
+                    settextjustify(0,2);
+
+
+                    x1+=80;
+                    x2+=80;
+
+                    if(x_mouse >=310 && x_mouse<=375 && y_mouse>=420 && y_mouse<=450){/*鼠标在菜单M键*/
+                        jud=1;
+                        settextjustify(0,2);
+                        setcolor(RED);
+                        disphz(x1+5,y1+10,"菜单",RED,1,1);
+                        outtextxy(x1+40,y1+15,"(M)");/*M键*/
+                        if(cmd)
+                        num_key.u[1]=0x32;/*按了m键*/
+
+                    }
+                    else{
+                        settextjustify(0,2);
+                        setcolor(WHITE);
+                        disphz(x1+5,y1+10,"菜单",WHITE,1,1);
+                        outtextxy(x1+40,y1+15,"(M)");/*M键*/
+                    }
+                    rectangle(x1,y1,x2,y2);/*绘制矩形放在写完字之后，不然会用上个颜色去画*/
+                    x1+=80;
+                    x2+=80;
+
+                    if(x_mouse >=390 && x_mouse<=455 && y_mouse>=420 && y_mouse<=450){/*鼠标在退出x键*/
+                        jud=1;
+                        setcolor(RED);
+                        settextjustify(0,2);
+                        disphz(x1+5,y1+10,"退出",RED,1,1);
+                        outtextxy(x1+40,y1+15,"(X)");/*X键*/
+                        if(cmd)
+                        num_key.u[1]=0x2D;/*x扫描码*/
+                    }
+                    else{
+                        setcolor(WHITE);
+                        settextjustify(0,2);
+                        disphz(x1+5,y1+10,"退出",WHITE,1,1);
+                        outtextxy(x1+40,y1+15,"(X)");/*X键*/
+                    }
+                    rectangle(x1,y1,x2,y2);/*绘制矩形放在写完字之后，不然会用上个颜色去画*/
+                    x1+=80;
+                    x2+=80;
+
+                    if(x_mouse >=470 && x_mouse<=550 && y_mouse>=420 && y_mouse<=450){/*鼠标在圆饼图c键*/
+                        jud=1;
+                        setcolor(RED);
+                        settextjustify(0,2);
+                        disphz(x1+5,y1+10,"圆饼图",RED,1,1);
+                        outtextxy(x1+55,y1+15,"(C)");/*C键*/
+                        if(cmd)
+                        num_key.u[1]=0x2e;/*按了c键*/
+                    }
+                    else{
+                        setcolor(WHITE);
+                        settextjustify(0,2);
+                        disphz(x1+5,y1+10,"圆饼图",WHITE,1,1);
+                        outtextxy(x1+55,y1+15,"(C)");/*C键*/
+                    }
+                    rectangle(x1,y1,x2+15,y2);
+                    if(cmd_0 == cmd && cmd == 1)/*一直按左键*/
+                            continue;
+                    else
+                            cmd_0 = cmd;
+                    if(num_key.n==0){/*鼠标不在按键范围内,左击也不能执行bar9*/
+                            continue;/*不执行bar9,避免频闪*/
+                    }
+                    /**读鼠标***/
+
+
+				/*temp = num_key.u[1];*//*单步调试看一下扫描码*/
+PPP:            if(num_key.u[1]!=0x2D && num_key.u[1]!=0x2e && num_key.u[1]!=0x32 && num_key.u[1] !=0x19 && num_key.u[1] !=0x31)
+                    continue;
+                if( num_key.u[1]==0x2D){/*x扫描码按到x直接退出返回0*/
+					cleardevice();/*清屏*/
+					return 0;/*返回0*/
+				}
+				if(num_key.u[1]==0x2e){/*按了c键，想看圆饼图返回2*/
+                    cleardevice();/*清屏*/
+					return 2;/*返回2*/
+				}
+				if(num_key.u[1]==0x32){/*按了m键,回到主菜单,返回3*/
+                    cleardevice();
+                    return 3;
+				}
+				if( num_key.u[1] ==0x19 )/*p扫描码如果在第一页按p不反应*/{
+					if(num_page==0)
+						continue;
+					num_page--;
+				}
+				if( num_key.u[1] ==0x31 )/*n扫描码在最后一页按n不反应*/{
+					if(num_page==(cnt+2)/3-1)/*num_page从0开始,cnt为1时独占一页所以+2*/
+						continue;
+					num_page++;
+				}
+				/*操作完了之后直接把键值清零*/
+
+                if(num_key.n){/*清空键值*/
+                    num_key.n=0;
+                }
+				cleardevice();/*清屏,后果就是鼠标会直接点两次*/
+				cursor(x_mouse0,y_mouse0);
+				subject_and_color(block,fillcolor,subject,3);/*右上角的颜色对应学科*/
+				line(x_point.x,x_point.y,zero.x,zero.y);/*x轴*/
+                line(y_point.x,y_point.y,zero.x,zero.y);/*y轴*/
+                settextjustify(2,1);
+				for(i=0;i<=10;i++)
+                outtextxy(y_100.x,y_100.y+(zero.y-y_100.y)*i/10,kedu[i]);
+                /*for循环一波标记刻度*/
+				/*line(x_point.x,x_point.y,x_point.x-10,x_point.y+10);*/
+                /*line(x_point.x,x_point.y,x_point.x-10,x_point.y-10);*/
+                /*line(y_point.x,y_point.y,y_point.x-10,y_point.y+10);*/
+                /*line(y_point.x,y_point.y,y_point.x+10,y_point.y+10);*/
+                settextjustify(1,0);
+                disphz(y_point.x,y_point.y-10,"分数",WHITE,1,1);/*y轴代表的意义,字要显示在y_point.y上面，所以纵坐标要向上一点(-10)*/
+                settextjustify(0,1);
+                disphz(x_point.x,x_point.y-10,"姓名",WHITE,1,1);/*x轴代表的意义*/
+                temp1 = zero;/**/
+                temp2 = zero;
+				bar9(stu,num_page,temp1,temp2,zero,cnt,fillcolor);
+
+		}
+	/*画3*3的条形图*/
+
+}
+void bar9(STU *stu,int num_page,POINT temp1,POINT temp2,POINT zero,int cnt,int* color){/*用两个temp跑一个3*3循环画柱状图*/
+   /** turing_bar子函数
+     * 函数功能，把每一页的条形图画和选项出来
+     *
+     * stu,结构体
+     * num_page,页数
+     * temp1, temp2,用来填充的
+     * zero,零点坐标
+     * cnt,人数
+     * color 每个学科对饮的颜色
+     *
+     *
+     *
+     */
+
+	/*学生，页数，两个临时点，三个参照物*/
+	int i,j;
+	char rank[100];/*看看以后改成数字的排名，先放着*/
+	int x1=150,x2=215,y1=420,y2=450;
+		for(j=0;j<3;j++){
+                    if(num_page*3+j==cnt)
+                        break;
+                    temp1.x+=30;
+                    temp2.x=temp1.x+30;
+                    /*************先用红的描边，免得边界是白色无法处理，填充上盖侧盖的时候直接填充边界为红色即可**************/
+                    setcolor(RED);
+					setfillstyle(1,color[0]);
+					bar3d(temp1.x,zero.y-stu[(num_page)*3+j].math*220/100,temp2.x,380,10,1);/*红色描边*/
+					floodfill(temp1.x+3,zero.y-stu[(num_page)*3+j].math*220/100-1,RED);/*上面*/
+					floodfill(temp2.x+1,temp2.y-3,RED);/*侧面，0分不用担心，定位会在平行四边形内部的*/
+					setcolor(WHITE);
+					bar3d(temp1.x,zero.y-stu[(num_page)*3+j].math*220/100,temp2.x,380,10,1);/*白色描边*/
+					/******************************************第一个柱子画完了********************************************/
+					temp1.x+=30;
+					temp2.x+=30;
+					disphz(temp1.x+4,temp1.y,stu[num_page*3+j].name,WHITE,1,1);
+					/***********************************坐标平移*************************************************/
+                    setcolor(RED);
+					setfillstyle(1,color[1]);
+					bar3d(temp1.x,zero.y-stu[(num_page)*3+j].english*220/100,temp2.x,380,10,1);
+					floodfill(temp1.x+3,zero.y-stu[(num_page)*3+j].english*220/100-1,RED);/*上面*/
+					floodfill(temp2.x+1,temp2.y-3,RED);/*侧面，0分不用担心，定位会在平行四边形内部的*/
+					setcolor(WHITE);
+					bar3d(temp1.x,zero.y-stu[(num_page)*3+j].english*220/100,temp2.x,380,10,1);/*白色描边*/
+                    /******************************************第二个柱子画完了********************************************/
+					temp1.x+=30;
+					temp2.x+=30;
+					/***********************************坐标平移*************************************************/
+                    setcolor(RED);
+					setfillstyle(1,color[2]);
+					bar3d(temp1.x,zero.y-stu[(num_page)*3+j].computer*220/100,temp2.x,380,10,1);
+					floodfill(temp1.x+3,zero.y-stu[(num_page)*3+j].computer*220/100-1,RED);/*上面*/
+					floodfill(temp2.x+1,temp2.y-3,RED);/*侧面，0分不用担心，定位会在平行四边形内部的*/
+					setcolor(WHITE);
+					bar3d(temp1.x,zero.y-stu[(num_page)*3+j].computer*220/100,temp2.x,380,10,1);/*白色描边*/
+					/******************************************第三个柱子画完了********************************************/
+					temp1.x+=30;
+                    temp2.x=temp1.x+30;
+                    temp1.x+=30;
+                    temp2.x=temp1.x+30;
+                    temp1.x+=30;
+                    temp2.x=temp1.x+30;
+					/********************************换人*****************************************/
+				}
+
+
+}
+void subject_and_color(POINT block,int *color,char(* subject)[20],int num_subject){
+    /**
+     *  功能，在右上角把学科(分段)及
+     *  其对应颜色表示出来
+     *
+     *
+     *
+     *
+     */
+    int i;
+	setcolor(WHITE);
+	settextjustify(0,2);
+	for(i=0;i<num_subject;i++){
+		setfillstyle(1,color[i]);
+		bar(block.x,block.y+40*i,block.x+20,block.y+40*i+20);
+		disphz(block.x+40,block.y+40*i,subject[i],WHITE,1,1);
+	}
+	line(500,0,500,130);
+   	line(500,0,639,0);
+    line(500,130,639,130);
+    line(639,0,639,130);
+	/*在右上角把学科和对应颜色表示出来了*/
+}
+int stu_circle(STU *stu,int cnt){
+    /**
+     *  功能：画出圆饼图
+     * 并显示分数段对应颜色和比例
+     * 保证能够按x退出圆饼图（待改进）
+     * \param
+     * \return 返回值 0 退出（x）
+     *                1  看柱状图（C）
+     *                3 返回主菜单（M）
+     *
+     */
+    void filed_and_color(int *color,char(* filed)[30],int num_filed);
+	void rank_filed_fill(int* filed,float sum);
+	KEY key;
+	int i;
+	int x_mouse,y_mouse,cmd;/*鼠标开始的位置*/
+
+	int rank_filed[6]={0};
+	int sum=0;
+	int anti_jud =1;/*保证不是按住不松*/
+	int color[6]={0,4,6,14,3,2};/*红棕黄青绿*/
+
+    char filed[6][30]={"","0-59","60-69","70-79","80-89","90-100"};
+    filed_and_color(color,filed,5);
+
+	for(i=0;i<cnt;i++){
+			rank_filed_fill(rank_filed,stu[i].sum);/*把第i个学生但成绩归档*/
+	}
+	for(i=1;i<=5;i++){
+		setfillstyle(1,color[i]);
+		sum+=rank_filed[i-1];
+		if(rank_filed[i])/*只要对应分数段有人就画，没人不画，避免90-100分段没人的时候绿色直接填充整个图*/
+		pieslice(319,239,sum*360/cnt,(sum+rank_filed[i])*360/cnt,150);/*中心是终点半径150*/
+	}
+	rectangle(210,400,260,430);/*退出框*/
+	disphz(210,405,"菜单",WHITE,1,1);
+	settextjustify(0,2);/*点在文本左上角*/
+	outtextxy(240,410,"(M)");/*显示的时候稍微下面一点*/
+
+	rectangle(270,400,320,430);/*退出框*/
+	disphz(270,405,"退出",WHITE,1,1);
+	settextjustify(0,2);/*点在文本左上角*/
+	outtextxy(300,410,"(x)");/*显示的时候稍微下面一点*/
+
+	rectangle(330,400,405,430);/*退出框*/
+	disphz(330,405,"柱状图",WHITE,1,1);
+	settextjustify(0,2);/*点在文本左上角*/
+	outtextxy(380,410,"(c)");/*显示的时候稍微下面一点*/
+    cursor(x_mouse0,y_mouse0);/*画出来鼠标*/
+    set_mouse_sit(x_mouse0,y_mouse0);/*将鼠标设置好*/
+	while(1){
+        key.n=bioskey(1);
+        read_mouse(&x_mouse,&y_mouse,&cmd);/*同时检测*/
+        cursor(x_mouse0,y_mouse0);
+        cursor(x_mouse,y_mouse);/*两步把鼠标清除*/
+        x_mouse0 = x_mouse;
+        y_mouse0 = y_mouse;
+        if(key.n!=0)
+            bioskey(0);
+        if(cmd==0)
+            anti_jud=1;
+        if(x_mouse >=270 && x_mouse <= 320 && y_mouse >= 400 && y_mouse <=430){/*鼠标在退出键*/
+            setcolor(RED);
+            rectangle(270,400,320,430);/*退出框*/
+            disphz(270,405,"退出",RED,1,1);
+            settextjustify(0,2);/*点在文本左上角*/
+            outtextxy(300,410,"(x)");/*显示的时候稍微下面一点*/
+            if(cmd && anti_jud){
+                anti_jud = 0;
+                key.u[1]=0x2D;
+            }
+        }
+        else{
+            setcolor(WHITE);
+            rectangle(270,400,320,430);/*退出框*/
+            disphz(270,405,"退出",WHITE,1,1);
+            settextjustify(0,2);/*点在文本左上角*/
+            outtextxy(300,410,"(x)");/*显示的时候稍微下面一点*/
+        }
+        if(x_mouse >=330 && x_mouse <= 405 && y_mouse >= 400 && y_mouse <=430){/*鼠标在退出键*/
+            setcolor(RED);
+            rectangle(330,400,405,430);/*退出框*/
+            disphz(330,405,"柱状图",RED,1,1);
+            settextjustify(0,2);/*点在文本左上角*/
+            outtextxy(380,410,"(c)");/*显示的时候稍微下面一点*/
+            if(cmd && anti_jud){
+                anti_jud = 0;
+                key.u[1]=0x2e;
+            }
+        }
+        else{
+            setcolor(WHITE);
+            rectangle(330,400,405,430);/*退出框*/
+            disphz(330,405,"柱状图",WHITE,1,1);
+            settextjustify(0,2);/*点在文本左上角*/
+            outtextxy(380,410,"(c)");/*显示的时候稍微下面一点*/
+        }
+        if(x_mouse >=210 && x_mouse <= 260 && y_mouse >= 400 && y_mouse <=430){/*鼠标在退出键*/
+            setcolor(RED);
+            rectangle(210,400,260,430);/*退出框*/
+            disphz(210,405,"菜单",RED,1,1);
+            settextjustify(0,2);/*点在文本左上角*/
+            outtextxy(240,410,"(M)");/*显示的时候稍微下面一点*/
+            if(cmd && anti_jud){
+                anti_jud = 0;
+                key.u[1]=0x32;
+            }
+        }
+        else{
+            setcolor(WHITE);
+            rectangle(210,400,260,430);/*退出框*/
+            disphz(210,405,"菜单",WHITE,1,1);
+            settextjustify(0,2);/*点在文本左上角*/
+            outtextxy(240,410,"(M)");/*显示的时候稍微下面一点*/
+        }
+        if(key.u[1]!=0x32 && key.u[1]!=0x2D && key.u[1]!=0x2e)/*不是制定按键就不相应*/
+                    continue;
+        cleardevice();/*直接清屏,等待下一步操作*/
+		if( key.u[1]==0x32)/*m扫描码按到m返回主菜单，重新输入文件名*/
+					return 3;
+        if(key.u[1]==0x2D)/*X*/
+                    return 0;
+        if(key.u[1]==0x2e)/*C*/
+                    return 1;
+	}
+
+
+}
+void rank_filed_fill(int* filed,float sum){
+    /** \ 作为stu_circle子函数
+     *
+     * \功能：给每一个学生分好分数段
+     */
+
+	if(sum<60)
+		filed[1]++;
+	else
+	if(sum<70)
+		filed[2]++;
+	else
+	if(sum<80)
+		filed[3]++;
+	else
+	if(sum<90)
+		filed[4]++;
+	else
+		filed[5]++;
+}
+void filed_and_color(int *color,char(* filed)[30],int num_filed){
+    /** \brief stu_circle 子函数
+     * 功能：在饼状图上画右上角对应分数段和颜色
+     *
+     * \param
+     * \param  color  颜色数组
+     * \return filed  表示分数段数组
+     *         num_filed  分数段个数（5）
+     */
+
+	int i;
+	POINT block2={500,300};/*block  右下角点*/
+	POINT block={530,20};/*右上角的点*/
+	setcolor(WHITE);
+	settextjustify(0,2);
+	for(i=1;i<=num_filed;i++){
+		setfillstyle(1,color[i]);
+		bar(block.x,block.y+25*i,block.x+25,block.y+25*i+10);
+		outtextxy(block.x+25+5,block.y+25*i,filed[i]);
+	}
+	line(500,40,500,160);
+   	line(500,40,639,40);
+    line(500,160,639,160);
+    line(639,40,639,160);
+	/*在右上角把学科和对应颜色表示出来了*/
+
+    /** \brief for(i=1;i<=num_filed;i++){
+		setfillstyle(1,color[i]);
+		bar(block2.x,block2.y+25*i,block2.x+25,block2.y+25*i+10);
+		outtextxy(block2.x+25+5,block2.y+25*i,filed[i]);
+	}
+     *
+     * \param
+     * \param
+     * \return
+     *
+     */
+
+}
+int picture(int kind_pic,STU *stu,int num_stu){
+/*尽量不在主函数用goto把。。。*/
+	while(kind_pic==1 || kind_pic==2){
+        if(kind_pic==1){
+
+                kind_pic=turing_bar(stu,num_stu);/*显示柱状图然后回来继续判断*/
+            }
+        else
+        if(kind_pic==2){
+            kind_pic=stu_circle(stu,num_stu);;/*现实圆饼图然后继续判断*/
+        }
+    }
+    return kind_pic;/*把kind返回*/
+
+
+}
+void end_zimu(){
+
+    FILE *fp;
+	char zimu[1000]="计科一九级三班邢鸿轩作业";
+	char zimu2[1000]="感谢老师教导";
+	char temp[1000]={0};
+	KEY key={0};
+   	int  i;
+  	long  j;
+	int t;
+  	char far *p;
+	int x = 200;
+	int k = 15;/*k的2进制代表写什么位面*/
+	int y = 150;
+	int x_end = 600;
+	int y_end = 196;
+	int t_x1 = x;
+	int t_y1 = y;
+	int t_x2 = x+400;
+	int t_y2 = y+50;
+	setcolor(WHITE);
+	setbkcolor(BLACK);
+	setfillstyle(1,RED);
+
+	/*circle(400,200,30);*/
+	/*floodfill(400,200,WHITE);*/
+
+
+
+	for(i=0;i<strlen(zimu)/2;i++){
+		temp[i*2]=zimu[i*2];
+		temp[i*2+1] = zimu[i*2+1];
+		for(j=1;j<20;j++)
+          	delay(5000);
+         	disphz(200,150,temp,WHITE,1,5);
+         	my_sound(262);
+            my_sound(700);
+      		for(j=1;j<20;j++)
+       		    delay(5000);
+		}
+	memset(temp,0,sizeof(temp));
+	for(i=0;i<strlen(zimu2)/2;i++){
+		temp[i*2]=zimu2[i*2];
+		temp[i*2+1] = zimu2[i*2+1];
+		for(j=1;j<20;j++)
+          	delay(5000);
+         	disphz(250,180,temp,WHITE,1,5);
+            my_sound(262);
+            my_sound(700);
+      		for(j=1;j<20;j++)
+       		    delay(5000);
+		}
+    	fp = fopen(PIC,"wb"); /*往该文件存图*/
+        outportb(0x3ce, 4);/*索引读允许寄存器*/
+    	for(i = 0; i < 4; i++){
+        	 outportb(0x3cf, i);/*指定位面，存图只能一个一个位面存*/
+		for(t=y;t<y_end;t++){/*行数*/
+		p = (char far*)0xa0000000L+t*80+x/8;/*VGA显存地址*/
+        	for(j = 0; j < (x_end-x)/8; j++){/*一行50个字节*/
+	              fputc(*p, fp);
+	              p++;
+	         }
+   	 }
+	}
+  	fclose(fp);
+   	outportb(0x3cf, 0);/*将读位面选择寄存器恢复至初始状态*/
+
+	for(i=0;i<=y;i++){
+        key.n = bioskey(1);
+        if(key.u[1]==0x1){/*esc键*/
+            cleardevice();
+            fclose(fp);
+            outportb(0x3c5,0xf);/*颜色位面写允许寄存器恢复成初始状态*/
+            return ;
+        }
+	if(key.n)
+	    bioskey(0);
+		fp = fopen(PIC,"rb");
+		/*for(i=0;i<4;i++){*/
+		outportb(0x3c4,2);/*索引寄存器,2代表颜色位面写允许寄存器*/
+		outportb(0x3c5,k);
+
+		for(t=y-i;t<y_end-i;t++){/*行数*/
+		p = (char far*)0xa0000000L+t*80+x/8;/*VGA显存地址*/
+        	 for(j = 0; j < (x_end-x)/8; j++){/*一行50个字节*/
+	              *p=fgetc(fp);
+	              p++;
+	         }
+   		}
+		for(t=0;t<=7;t++)
+		delay(5000);
+		setviewport(x,y-i,x_end,y_end-i,0);
+		clearviewport();
+		fclose(fp);
+	}
+	/*字幕该顶出去了*/
+	for(i=y+1;i<=y_end;i++){
+        key.n = bioskey(1);
+        if(key.u[1]==0x1){/*esc键*/
+            cleardevice();
+            fclose(fp);
+            outportb(0x3c5,0xf);/*颜色位面写允许寄存器恢复成初始状态*/
+            return ;
+        }
+		fp = fopen(PIC,"rb");
+		/*for(i=0;i<4;i++){*/
+		outportb(0x3c4,2);/*索引寄存器,2代表颜色位面写允许寄存器*/
+		outportb(0x3c5,k);/*k=15,,同时写4个位面*/
+
+        fseek(fp,(i-y)*50L,SEEK_SET);/*读写位置指针(存的区域一共一行才50个)*/
+		for(t=0;t<y_end-i;t++){/*行数，这里不能写<=不然最后一行会多一行白色(暂时不知道原因)*/
+		p = (char far*)0xa0000000L+t*80+x/8;/*VGA显存地址*/
+
+        	 for(j = 0; j < (x_end-x)/8; j++){/*示图口的一行(200-600)一共50个字节*/
+	              *p=fgetc(fp);
+	              p++;
+	         }
+   		}
+   		for(t=0;t<=7;t++)
+		delay(5000);
+		setviewport(x,0,x_end,y_end-i,0);/*设置试图口，节约运行时间*/
+		clearviewport();
+		fclose(fp);
+	}
+
+
+	outportb(0x3c5,0xf);/*颜色位面写允许寄存器恢复成初始状态*/
+	return ;
+}
+void my_sound(int fred){
+	typedef union {
+
+	short n;
+	char u[2];
+
+}YIN;
+
+	const long sy = 1193180;/*石英震荡常数*/
+	char bits;/*备份*/
+	YIN yin;
+	yin.n = sy / fred;/*算出初始值*/
+
+	outportb(0x43,0x6b);/*计时器控制寄存器,规定了打开2号计时器，先写低后写高*/
+	outportb(0x42,yin.u[0]);
+	outportb(0x42,yin.u[1]);/*把初始值写了进去*/
+	bits = inportb(0x61);/*备份*/
+	outportb(0x61,bits|3);/*pb口的信号控制打开*/
+		delay(5000);
+	outportb(0x61,bits&0xfc);/*关闭控制口*/
+	outportb(0x61,bits);/*还原0x61*/
+	return ;
+
+}
+int mouse_check(){
+
+	/*
+   	*    init_mouse的子函数
+	*	函数功能：测试鼠标驱动是否安装
+	*	(0号功能)
+	*	返回值，-1安装成功
+	*		0 安装失败
+	*/
+	union REGS inregs,outregs;
+	inregs.x.ax = 0;/*0x33的0号功能是监测鼠标是否安装*/
+	int86(0x33,&inregs,&outregs);/*利用int86来调用0x33中断*/
+	return outregs.x.ax;/*直接返回出口函数，判断是否安装驱动的任务交给read_mouse*/
+
+}
+int init_mouse(int xmin , int ymin , int xmax , int ymax){
+
+	/*
+	*	函数功能：初始化鼠标的位置
+	*	(7、8号功能)
+	*       设置鼠标移动的边界
+	*	参数，输入两个坐标，第一个坐标是边界左上角
+	*	第二个是边界右下角
+	*	返回值：1代表初始化成功，
+	*		0代表初始化失败。
+	*
+	*/
+	union REGS inregs,outregs;
+	if(mouse_check()==0){/*鼠标安装失败了*/
+		/**********显示失败信息*********/
+		return 0;/*程序终止*/
+	}
+	inregs.x.ax = 7;/*水平方向初始化*/
+	inregs.x.cx = xmin;
+	inregs.x.dx = xmax;
+	int86(0x33,&inregs,&outregs);
+	inregs.x.ax = 8;/*竖直方向初始化*/
+	inregs.x.cx = ymin;
+	inregs.x.dx = ymax;
+	int86(0x33,&inregs,&outregs);
+
+	return 1;/*返回初始化成功*/
+
+
+}
+void set_mouse_sit(int x,int y){
+	/*
+	*	函数功能，设定鼠标初始位置
+	*	(4号功能)
+	*/
+	union REGS inregs,outregs;
+	inregs.x.ax = 4;
+	inregs.x.cx = x;
+	inregs.x.dx = y;
+	int86(0x33,&inregs,&outregs);
+}
+int read_mouse(int *mx,int *my,int *mbutton){
+	/*
+	*	函数功能：检查鼠标状态
+	*	(鼠标状态包括了按键状态和移动状态)
+	*	一旦状态改变则该函数break;
+    *   通过改变指针指向的变量值随时随地改变鼠标
+	*	返回值:返回按键状态
+	*/
+	union REGS regs;
+	int x0 = *mx, y0 = *my, button0 = *mbutton;
+    	int xnew, ynew;
+    	/*do{*/
+            regs.x.ax = 3;/*ax入口参数*/
+            int86(0x33, &regs, &regs);
+            xnew = regs.x.cx;
+            ynew = regs.x.dx;/*返回坐标*/
+            *mbutton = regs.x.bx;/*检查按键情况*/
+    	/*}while(xnew == x0 && ynew == y0 && *mbutton == button0);*/
+    	*mx = xnew;/*把新的坐标通过指针传递给mx，my，以便接着判断*/
+        *my = ynew;
+   	switch(*mbutton){
+		case 0:   return 0;   /*没有键被按下*/
+		case 1:   return 1;   /*左键按下*/
+		case 2:   return 2;   /*右键按下*/
+		case 3:   return 3;   /*左右键同时按下*/
+		default:   return 4;   /*其他情况*/
+	}
+}
+void cursor(int x,int y){
+	/*
+	*	函数功能:对当前坐标下
+	*	进行一次以白色为底的异或画十字鼠标
+	*/
+	/*int x1,y1,x2,y2;*/
+	/*x1 = x-4;*/
+	/*x2 = x+4;*/
+	/*y1 = y-3;*/
+	/*y2 = y+3;*/
+	setcolor(WHITE);/*使用反相*/
+	setwritemode(XOR_PUT);/*以白色为底进行异或*/
+	/*line(x1,y,x2,y);横着划线*/
+	/*line(x,y1,x,y2);竖着划线*/
+	line(x,y,x+10,y+10);
+	line(x,y,x-10,y+15);
+	line(x-10,y+15,x,y+6);
+	line(x,y+6,x+10,y+10);
+	setwritemode(COPY_PUT);/*恢复异或操作*/
+}
